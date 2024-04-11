@@ -5,12 +5,13 @@ fn sleep_cmd(duration: &str) -> std::process::Command {
 }
 
 fn main() {
-    cmd_supervisor::CommandSupervisor::spawn([
-        sleep_cmd("30"),
-        sleep_cmd("30"),
-        sleep_cmd("30"),
-        sleep_cmd("30"),
-        sleep_cmd("30"),
+    cmd_supervisor::PidSet::new([
+        sleep_cmd("1").spawn().unwrap().id(),
+        sleep_cmd("3").spawn().unwrap().id(),
+        sleep_cmd("3").spawn().unwrap().id(),
+        sleep_cmd("3").spawn().unwrap().id(),
+        sleep_cmd("3").spawn().unwrap().id(),
     ])
-    .wait_one()
+    .wait_all()
+    .unwrap()
 }
