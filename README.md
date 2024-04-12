@@ -1,3 +1,6 @@
+[![Continuos Integration](https://github.com/rogercoll/pid-set/actions/workflows/test.yaml//badge.svg?branch=main)](https://github.com/rogercoll/pid-set/actions/workflows/test.yaml?query=branch%3Amain)
+[![dependency status](https://deps.rs/repo/github/rogercoll/pid-set/status.svg)](https://deps.rs/repo/github/rogercoll/pid-set)
+
 # PID Set Library
 
 The `pid_set` library provides tools for managing and monitoring process identifiers (PIDs) using epoll on Linux platforms. It utilizes epoll and pidfd to asynchronously notify when a process exits, offering a robust way to handle PID-related events.
