@@ -216,3 +216,48 @@ impl PidSet {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{Duration, Instant};
+
+    fn sleep_cmd(duration: &str) -> std::process::Command {
+        let mut cmd1 = std::process::Command::new("sleep");
+        cmd1.arg(duration);
+        cmd1
+    }
+
+    #[test]
+    fn wait_all() {
+        let mut pid_set = PidSet::new([
+            sleep_cmd("0.1").spawn().unwrap().id(),
+            sleep_cmd("0.2").spawn().unwrap().id(),
+            sleep_cmd("0.3").spawn().unwrap().id(),
+            sleep_cmd("0.4").spawn().unwrap().id(),
+            sleep_cmd("0.5").spawn().unwrap().id(),
+        ]);
+
+        assert!(pid_set.wait_all().is_ok());
+    }
+
+    #[test]
+    fn wait_any() {
+        let start_time = Instant::now(); // Start the timer
+
+        let mut pid_set = PidSet::new([
+            sleep_cmd("0.2").spawn().unwrap().id(),
+            sleep_cmd("3").spawn().unwrap().id(),
+            sleep_cmd("3").spawn().unwrap().id(),
+            sleep_cmd("3").spawn().unwrap().id(),
+            sleep_cmd("3").spawn().unwrap().id(),
+        ]);
+
+        assert!(pid_set.wait_any().is_ok());
+        assert!(
+            start_time.elapsed() < Duration::from_secs(3),
+            "Expected wait_any() to return in less than 3 seconds, but it took {:?}",
+            start_time.elapsed()
+        );
+    }
+}
