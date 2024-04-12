@@ -11,8 +11,8 @@ fn main() {
         sleep_cmd("3").spawn().unwrap().id(),
         sleep_cmd("3").spawn().unwrap().id(),
         sleep_cmd("3").spawn().unwrap().id(),
-    ])
-    .unwrap();
+    ]);
+
     pid_set.wait_all().unwrap();
 
     pid_set.close().unwrap()

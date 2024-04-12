@@ -34,7 +34,7 @@ use pid_set::{PidSet, PidSetError};
 fn main() -> Result<(), PidSetError> {
     // Example PIDs to monitor
     let pids = vec![1234, 5678];
-    let mut pid_set = PidSet::new(pids)?;
+    let mut pid_set = PidSet::new(pids);
 
     // Wait for any one PID to exit
     pid_set.wait_any()?;

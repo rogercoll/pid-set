@@ -24,7 +24,7 @@
 //!
 //! fn main() -> Result<(), PidSetError> {
 //!     let pids = vec![1234, 5678, 431, 9871, 2123]; // Example PIDs
-//!     let mut pid_set = PidSet::new(pids)?;
+//!     let mut pid_set = PidSet::new(pids);
 //!
 //!     // Wait for any PID to exit
 //!     pid_set.wait_any()?;
@@ -48,7 +48,7 @@ type FDPidsMap = HashMap<PID, FD>;
 /// Manages a set of PIDs and their corresponding epoll file descriptors.
 pub struct PidSet {
     fd_pids: FDPidsMap,
-    epoll_fd: FD,
+    epoll_fd: Option<FD>,
 }
 
 /// Errors that can occur in the `PidSet`.
@@ -79,40 +79,56 @@ impl PidSet {
     /// # Arguments
     ///
     /// * `pids` - An iterator over the PIDs to monitor.
-    ///
-    /// # Errors
-    ///
-    /// Returns `PidSetError` if an error occurs while setting up epoll or pidfds.
-    pub fn new<P: IntoIterator<Item = PID>>(pids: P) -> Result<Self, PidSetError> {
+    pub fn new<P: IntoIterator<Item = PID>>(pids: P) -> Self {
+        let fd_pids: FDPidsMap = pids.into_iter().map(|pid| (pid, 0)).collect();
+        Self {
+            fd_pids,
+            epoll_fd: None,
+        }
+    }
+
+    fn register_pid(epoll_fd: i32, pid: u32, token: u32) -> Result<FD, PidSetError> {
+        let cfd = unsafe { syscallerr(libc::syscall(libc::SYS_pidfd_open, pid, 0)) }
+            .map_err(|err| PidSetError::PidFdOpenSyscall(pid, err))?;
+        // use pid as token
+        unsafe {
+            syserr(libc::epoll_ctl(
+                epoll_fd,
+                EPOLL_CTL_ADD,
+                cfd as i32,
+                &mut libc::epoll_event {
+                    events: EPOLLIN as u32,
+                    u64: token as u64,
+                } as *mut _ as *mut libc::epoll_event,
+            ))
+        }
+        .map_err(PidSetError::EpollCtl)?;
+        Ok(cfd as i32)
+    }
+
+    fn deregister_pid(epoll_fd: i32, fd: i32) -> Result<(), PidSetError> {
+        let _ = unsafe {
+            syserr(libc::epoll_ctl(
+                epoll_fd,
+                EPOLL_CTL_DEL,
+                fd,
+                std::ptr::null_mut(),
+            ))
+        }
+        .map_err(PidSetError::EpollWait)?;
+        Ok(())
+    }
+
+    fn init_epoll(&mut self) -> Result<FD, PidSetError> {
         // EPOLL_CLOEXEC flag disabled
         let epoll_fd =
             unsafe { syserr(libc::epoll_create1(0)) }.map_err(PidSetError::EpollCreate)?;
-        let fd_pids: Result<FDPidsMap, PidSetError> = pids
-            .into_iter()
-            .map(|pid| {
-                let cfd = unsafe { syscallerr(libc::syscall(libc::SYS_pidfd_open, pid, 0)) }
-                    .map_err(|err| PidSetError::PidFdOpenSyscall(pid, err))?;
-                // use pid as token
-                unsafe {
-                    syserr(libc::epoll_ctl(
-                        epoll_fd,
-                        EPOLL_CTL_ADD,
-                        cfd as i32,
-                        &mut libc::epoll_event {
-                            events: EPOLLIN as u32,
-                            u64: pid as u64,
-                        } as *mut _ as *mut libc::epoll_event,
-                    ))
-                }
-                .map_err(PidSetError::EpollCtl)?;
-                Ok((pid, cfd as i32))
-            })
-            .collect();
+        for (pid, fd) in &mut self.fd_pids {
+            *fd = PidSet::register_pid(epoll_fd, *pid, *pid)?;
+        }
 
-        Ok(Self {
-            fd_pids: fd_pids?,
-            epoll_fd,
-        })
+        self.epoll_fd = Some(epoll_fd);
+        Ok(epoll_fd)
     }
 }
 
@@ -143,10 +159,11 @@ impl PidSet {
     fn wait(&mut self, n: usize) -> Result<usize, PidSetError> {
         let max_events = self.fd_pids.len();
         let mut total_events: usize = 0;
+        let epoll_fd = self.epoll_fd.unwrap_or(self.init_epoll()?);
         while total_events < n {
             let mut events: Vec<libc::epoll_event> = Vec::with_capacity(max_events);
             let event_count = syserr(unsafe {
-                libc::epoll_wait(self.epoll_fd, events.as_mut_ptr(), max_events as i32, -1)
+                libc::epoll_wait(epoll_fd, events.as_mut_ptr(), max_events as i32, -1)
             })
             .map_err(PidSetError::EpollWait)? as usize;
             unsafe { events.set_len(event_count as usize) };
@@ -159,15 +176,7 @@ impl PidSet {
                     .fd_pids
                     .get(&cdata)
                     .ok_or(PidSetError::PidNotFound(cdata))?;
-                let _ = unsafe {
-                    syserr(libc::epoll_ctl(
-                        self.epoll_fd,
-                        EPOLL_CTL_DEL,
-                        *fd,
-                        std::ptr::null_mut(),
-                    ))
-                }
-                .map_err(PidSetError::EpollWait)?;
+                PidSet::deregister_pid(epoll_fd, *fd)?;
 
                 // remove from hashmap
                 self.fd_pids.remove(&cdata);
@@ -201,8 +210,9 @@ impl PidSet {
     /// # Errors
     ///
     /// Returns `PidSetError` if an error occurs while closing the epoll file descriptor.
-    pub fn close(self) -> Result<(), PidSetError> {
-        unsafe { syserr(libc::close(self.epoll_fd)) }.map_err(PidSetError::EpollClose)?;
+    pub fn close(mut self) -> Result<(), PidSetError> {
+        let epoll_fd = self.epoll_fd.unwrap_or(self.init_epoll()?);
+        unsafe { syserr(libc::close(epoll_fd)) }.map_err(PidSetError::EpollClose)?;
         Ok(())
     }
 }
