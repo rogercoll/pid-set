@@ -1,3 +1,40 @@
+//! # PID Set Library
+//!
+//! `pid_set` is a library for managing and monitoring process identifiers (PIDs) using epoll on Linux.
+//! It allows for asynchronous notification when a process exits by leveraging epoll and pidfd (process file descriptors).
+//!
+//! ## Features
+//! - Create a `PidSet` to manage multiple PIDs.
+//! - Monitor process exits using epoll.
+//! - Handle system call errors gracefully with custom errors.
+//!
+//! ## Usage
+//! Add this to your `Cargo.toml`:
+//!
+//! ```toml
+//! [dependencies]
+//! pid_set = "0.1.0"
+//! ```
+//!
+//! ## Examples
+//! Here's how you can use `PidSet` to monitor a list of PIDs:
+//!
+//! ```rust
+//! use pid_set::{PidSet, PidSetError};
+//!
+//! fn main() -> Result<(), PidSetError> {
+//!     let pids = vec![1234, 5678, 431, 9871, 2123]; // Example PIDs
+//!     let mut pid_set = PidSet::new(pids)?;
+//!
+//!     // Wait for any PID to exit
+//!     pid_set.wait_any()?;
+//!
+//!     // Clean up
+//!     pid_set.close()?;
+//!     Ok(())
+//! }
+//! ```
+
 use std::{collections::HashMap, usize};
 
 use libc::{EPOLLIN, EPOLL_CTL_ADD, EPOLL_CTL_DEL};
@@ -5,13 +42,16 @@ use libc::{EPOLLIN, EPOLL_CTL_ADD, EPOLL_CTL_DEL};
 type FD = i32;
 type PID = u32;
 
-// FDPidsMap represents the tracked PIDs and its associated file descriptor
+/// A map of process IDs (PIDs) to their associated file descriptors.
 type FDPidsMap = HashMap<PID, FD>;
+
+/// Manages a set of PIDs and their corresponding epoll file descriptors.
 pub struct PidSet {
     fd_pids: FDPidsMap,
     epoll_fd: FD,
 }
 
+/// Errors that can occur in the `PidSet`.
 #[derive(Debug, thiserror::Error)]
 pub enum PidSetError {
     #[error("Error while creating epoll file instance:`{0}`")]
@@ -34,6 +74,15 @@ pub enum PidSetError {
 }
 
 impl PidSet {
+    /// Creates a new `PidSet` with the specified PIDs.
+    ///
+    /// # Arguments
+    ///
+    /// * `pids` - An iterator over the PIDs to monitor.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PidSetError` if an error occurs while setting up epoll or pidfds.
     pub fn new<P: IntoIterator<Item = PID>>(pids: P) -> Result<Self, PidSetError> {
         // EPOLL_CLOEXEC flag disabled
         let epoll_fd =
@@ -82,6 +131,15 @@ fn syscallerr(status_code: libc::c_long) -> std::io::Result<libc::c_long> {
 }
 
 impl PidSet {
+    /// Waits for a specified number of PIDs to exit, up to the total number monitored.
+    ///
+    /// # Arguments
+    ///
+    /// * `n` - The number of PID events to wait for.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PidSetError` if an error occurs during epoll wait or if a PID is not found.
     fn wait(&mut self, n: usize) -> Result<usize, PidSetError> {
         let max_events = self.fd_pids.len();
         let mut total_events: usize = 0;
@@ -93,18 +151,15 @@ impl PidSet {
             .map_err(PidSetError::EpollWait)? as usize;
             unsafe { events.set_len(event_count as usize) };
             total_events += event_count;
-            println!("Events: {}", events.len());
 
             for event in events {
-                let cevent = event.events;
                 let cdata = event.u64 as u32;
-                println!("Deregistering Event: {} {}", cevent, cdata);
                 // TODO: return Error if event_count is -1
                 let fd = self
                     .fd_pids
                     .get(&cdata)
                     .ok_or(PidSetError::PidNotFound(cdata))?;
-                let status_code = unsafe {
+                let _ = unsafe {
                     syserr(libc::epoll_ctl(
                         self.epoll_fd,
                         EPOLL_CTL_DEL,
@@ -113,27 +168,39 @@ impl PidSet {
                     ))
                 }
                 .map_err(PidSetError::EpollWait)?;
-                println!("Deregister status code: {}", status_code);
 
                 // remove from hashmap
                 self.fd_pids.remove(&cdata);
             }
-
-            println!("Total events: {total_events}");
         }
         Ok(total_events)
     }
 
+    /// Waits for all PIDs to exit.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PidSetError` if an error occurs during the wait.
     pub fn wait_all(&mut self) -> Result<(), PidSetError> {
         self.wait(self.fd_pids.len())?;
         Ok(())
     }
 
+    /// Waits for any one PID to exit.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PidSetError` if an error occurs during the wait.
     pub fn wait_any(&mut self) -> Result<(), PidSetError> {
         self.wait(1)?;
         Ok(())
     }
 
+    /// Closes the epoll file descriptor and cleans up the `PidSet`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `PidSetError` if an error occurs while closing the epoll file descriptor.
     pub fn close(self) -> Result<(), PidSetError> {
         unsafe { syserr(libc::close(self.epoll_fd)) }.map_err(PidSetError::EpollClose)?;
         Ok(())
