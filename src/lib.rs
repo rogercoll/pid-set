@@ -23,7 +23,12 @@
 //! use pid_set::{PidSet, PidSetError};
 //!
 //! fn main() -> Result<(), PidSetError> {
-//!     let pids = vec![1234, 5678, 431, 9871, 2123]; // Example PIDs
+//!    let mut cmd1 = std::process::Command::new("sleep");
+//!    cmd1.arg("0.1");
+//!    let mut cmd2 = std::process::Command::new("sleep");
+//!    cmd2.arg("0.2");
+//!
+//!    let pids = vec![cmd1.spawn().unwrap().id(), cmd2.spawn().unwrap().id()]; // Example PIDs
 //!     let mut pid_set = PidSet::new(pids);
 //!
 //!     // Wait for any PID to exit
