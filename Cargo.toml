@@ -2,6 +2,12 @@
 name = "pid-set"
 version = "0.1.0"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "A processes identifier set to perform efficient wait operations using epoll"
+documentation = "https://github.com/rogercoll/pid-set"
+readme = "README.md"
+homepage = "https://github.com/rogercoll/pid-set"
+keywords = ["pid", "wait", "linux", "epoll"]
 
 [dependencies]
 libc = "0.2.153"
