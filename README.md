@@ -4,6 +4,7 @@
 
 
 [crates-badge]: https://img.shields.io/crates/v/pid-set.svg
+[crates-url]: https://crates.io/crates/pid-set
 
 # PID Set Library
 
