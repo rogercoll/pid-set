@@ -152,6 +152,18 @@ fn syscallerr(status_code: libc::c_long) -> std::io::Result<libc::c_long> {
 }
 
 impl PidSet {
+    pub fn insert(&mut self, pid: PID) -> Result<(), PidSetError> {
+        let epoll_fd = self.epoll_fd.unwrap_or(self.init_epoll()?);
+        PidSet::register_pid(epoll_fd, pid, pid)?;
+        Ok(())
+    }
+
+    pub fn len(&self) -> usize {
+        self.fd_pids.len()
+    }
+}
+
+impl PidSet {
     /// Waits for a specified number of PIDs to exit, up to the total number monitored.
     ///
     /// # Arguments

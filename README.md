@@ -1,5 +1,9 @@
-[![Continuos Integration](https://github.com/rogercoll/pid-set/actions/workflows/test.yaml//badge.svg?branch=main)](https://github.com/rogercoll/pid-set/actions/workflows/test.yaml?query=branch%3Amain)
-[![dependency status](https://deps.rs/repo/github/rogercoll/pid-set/status.svg)](https://deps.rs/repo/github/rogercoll/pid-set)
+[![Crates.io][crates-badge]][crates-url]
+[![CI](https://github.com/rogercoll/pid-set/actions/workflows/test.yaml//badge.svg?branch=main)](https://github.com/rogercoll/pid-set/actions/workflows/test.yaml?query=branch%3Amain)
+[![Dependency status](https://deps.rs/repo/github/rogercoll/pid-set/status.svg)](https://deps.rs/repo/github/rogercoll/pid-set)
+
+
+[crates-badge]: https://img.shields.io/crates/v/pid-set.svg
 
 # PID Set Library
 
