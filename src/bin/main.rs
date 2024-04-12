@@ -5,7 +5,7 @@ fn sleep_cmd(duration: &str) -> std::process::Command {
 }
 
 fn main() {
-    let mut pid_set = cmd_supervisor::PidSet::new([
+    let mut pid_set = pid_set::PidSet::new([
         sleep_cmd("1").spawn().unwrap().id(),
         sleep_cmd("3").spawn().unwrap().id(),
         sleep_cmd("3").spawn().unwrap().id(),
